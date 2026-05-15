@@ -41,7 +41,10 @@ export class InstagramProvider extends SocialAbstract {
       `[Instagram] ► ${step} | ${method} ${safeUrl} | body: ${safeBody}`,
     );
 
-    const res = await this.throttledFetch(url, options);
+    // Use raw fetch — we parse the Instagram error body ourselves.
+    // throttledFetch throws ApiError on 4xx before we can read the body,
+    // so we'd lose the detailed Instagram error code/message (e.g. code=190).
+    const res = await fetch(url, options);
     const responseText = await res.text();
 
     // ── Full response log on non-2xx ─────────────────────────────────────
@@ -59,7 +62,10 @@ export class InstagramProvider extends SocialAbstract {
           `type=${e.type} | message="${e.message}" | fbtrace_id=${e.fbtrace_id ?? 'n/a'}`,
         );
         if (res.status === 401 || e.code === 190) {
-          throw new RefreshTokenError(`[Instagram] ${step} token error ${e.code}: ${e.message}`);
+          const hint = (e as any).error_subcode === 460
+            ? 'Sesión invalidada por Meta — reconectar cuenta de Instagram'
+            : `token error ${e.code}`;
+          throw new RefreshTokenError(`[Instagram] ${step} ${hint}: ${e.message}`);
         }
         throw new Error(
           `[Instagram] ${step} HTTP ${res.status} code=${e.code} subcode=${(e as any).error_subcode ?? 'n/a'}: ${e.message}`,
@@ -87,7 +93,10 @@ export class InstagramProvider extends SocialAbstract {
         `type=${e.type} | message="${e.message}" | fbtrace_id=${e.fbtrace_id ?? 'n/a'}`,
       );
       if (e.code === 190 || e.code === 102) {
-        throw new RefreshTokenError(`[Instagram] ${step} token error ${e.code}: ${e.message}`);
+        const hint = (e as any).error_subcode === 460
+          ? 'Sesión invalidada por Meta — reconectar cuenta de Instagram'
+          : `token error ${e.code}`;
+        throw new RefreshTokenError(`[Instagram] ${step} ${hint}: ${e.message}`);
       }
       throw new Error(
         `[Instagram] ${step} API error code=${e.code} subcode=${(e as any).error_subcode ?? 'n/a'}: ${e.message}`,
